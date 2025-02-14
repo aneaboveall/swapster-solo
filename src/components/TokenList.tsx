@@ -11,8 +11,9 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { getTokenBalances, getTokenList, getTokenPrice } from "@/lib/utils";
+import { getTokenList, getTokenPrice } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
+import { PublicKey } from "@solana/web3.js";
 
 interface Token {
   mint: string;
@@ -41,13 +42,19 @@ export function TokenList({
 
       setLoading(true);
       try {
-        const [tokenList, balances] = await Promise.all([
-          getTokenList(),
-          getTokenBalances(publicKey),
-        ]);
+        // Get token balances using your working implementation
+        const balances = await connection.getParsedTokenAccountsByOwner(publicKey, {
+          programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+        });
 
-        const tokenMap = new Map(tokenList.map((t) => [t.address, t]));
-        const tokenPromises = balances.map(async (account) => {
+        const tokenList = await getTokenList();
+        const tokenMap = tokenList.reduce((map, item) => {
+          map.set(item.address, item);
+          return map;
+        }, new Map());
+
+        // Transform the balances into our token format
+        const tokenPromises = balances.value.map(async (account) => {
           const mintAddress = account.account.data.parsed.info.mint;
           const tokenInfo = tokenMap.get(mintAddress);
           const balance = account.account.data.parsed.info.tokenAmount;
@@ -65,6 +72,7 @@ export function TokenList({
 
         const loadedTokens = await Promise.all(tokenPromises);
         setTokens(loadedTokens.filter((t) => t.balance > 0));
+        console.log('Tokens loaded:', loadedTokens);
       } catch (error) {
         console.error("Error loading tokens:", error);
       } finally {
