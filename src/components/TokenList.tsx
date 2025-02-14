@@ -15,6 +15,8 @@ import { getTokenList, getTokenPrice } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import { PublicKey } from "@solana/web3.js";
 
+const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+
 interface Token {
   mint: string;
   symbol: string;
@@ -42,10 +44,11 @@ export function TokenList({
 
       setLoading(true);
       try {
-        // Get token balances using your working implementation
-        const balances = await connection.getParsedTokenAccountsByOwner(publicKey, {
-          programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-        });
+        // Fetch all token accounts owned by the wallet
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+          publicKey,
+          { programId: TOKEN_PROGRAM_ID }
+        );
 
         const tokenList = await getTokenList();
         const tokenMap = tokenList.reduce((map, item) => {
@@ -53,28 +56,30 @@ export function TokenList({
           return map;
         }, new Map());
 
-        // Transform the balances into our token format
-        const tokenPromises = balances.value.map(async (account) => {
-          const mintAddress = account.account.data.parsed.info.mint;
+        // Process token accounts and fetch prices
+        const tokenPromises = tokenAccounts.value.map(async (accountInfo) => {
+          const tokenAmount = accountInfo.account.data.parsed.info.tokenAmount;
+          const mintAddress = accountInfo.account.data.parsed.info.mint;
           const tokenInfo = tokenMap.get(mintAddress);
-          const balance = account.account.data.parsed.info.tokenAmount;
           const price = await getTokenPrice(mintAddress);
 
           return {
             mint: mintAddress,
             symbol: tokenInfo?.symbol || "Unknown",
-            balance: balance.uiAmount || 0,
-            decimals: balance.decimals,
-            price,
+            balance: tokenAmount.uiAmount || 0,
+            decimals: tokenAmount.decimals,
+            price: price,
             selected: false,
           };
         });
 
         const loadedTokens = await Promise.all(tokenPromises);
-        setTokens(loadedTokens.filter((t) => t.balance > 0));
-        console.log('Tokens loaded:', loadedTokens);
+        // Filter out tokens with zero balance
+        const filteredTokens = loadedTokens.filter(token => token.balance > 0);
+        console.log('Loaded tokens:', filteredTokens);
+        setTokens(filteredTokens);
       } catch (error) {
-        console.error("Error loading tokens:", error);
+        console.error('Error fetching tokens:', error);
       } finally {
         setLoading(false);
       }
