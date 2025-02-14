@@ -13,9 +13,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { getTokenList, getTokenPrice } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
-import { PublicKey } from "@solana/web3.js";
-
-const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 
 interface Token {
   mint: string;
@@ -26,12 +23,13 @@ interface Token {
   selected?: boolean;
 }
 
+const API_URL = 'http://localhost:3001';
+
 export function TokenList({
   onSelectionChange,
 }: {
   onSelectionChange: (tokens: Token[]) => void;
 }) {
-  const { connection } = useConnection();
   const { publicKey } = useWallet();
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,37 +42,44 @@ export function TokenList({
 
       setLoading(true);
       try {
-        // Fetch all token accounts owned by the wallet
-        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-          publicKey,
-          { programId: TOKEN_PROGRAM_ID }
-        );
+        // Fetch tokens from backend API
+        const response = await fetch(`${API_URL}/api/tokens`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            publicKey: publicKey.toString(),
+          }),
+        });
 
+        if (!response.ok) {
+          throw new Error('Failed to fetch tokens');
+        }
+
+        const data = await response.json();
         const tokenList = await getTokenList();
         const tokenMap = tokenList.reduce((map, item) => {
           map.set(item.address, item);
           return map;
         }, new Map());
 
-        // Process token accounts and fetch prices
-        const tokenPromises = tokenAccounts.value.map(async (accountInfo) => {
-          const tokenAmount = accountInfo.account.data.parsed.info.tokenAmount;
-          const mintAddress = accountInfo.account.data.parsed.info.mint;
-          const tokenInfo = tokenMap.get(mintAddress);
-          const price = await getTokenPrice(mintAddress);
+        // Process tokens and fetch prices
+        const tokenPromises = data.tokens.map(async (token: any) => {
+          const tokenInfo = tokenMap.get(token.mint);
+          const price = await getTokenPrice(token.mint);
 
           return {
-            mint: mintAddress,
+            mint: token.mint,
             symbol: tokenInfo?.symbol || "Unknown",
-            balance: tokenAmount.uiAmount || 0,
-            decimals: tokenAmount.decimals,
+            balance: token.amount || 0,
+            decimals: tokenInfo?.decimals || 0,
             price: price,
             selected: false,
           };
         });
 
         const loadedTokens = await Promise.all(tokenPromises);
-        // Filter out tokens with zero balance
         const filteredTokens = loadedTokens.filter(token => token.balance > 0);
         console.log('Loaded tokens:', filteredTokens);
         setTokens(filteredTokens);
@@ -86,7 +91,7 @@ export function TokenList({
     }
 
     loadTokens();
-  }, [publicKey, connection]);
+  }, [publicKey]);
 
   const filteredTokens = tokens.filter((token) => {
     const matchesPrice = !minPrice || token.price >= parseFloat(minPrice);
