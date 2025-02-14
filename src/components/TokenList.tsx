@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import {
   Table,
   TableBody,
@@ -11,15 +11,17 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { getTokenList, getTokenPrice } from "@/lib/utils";
+import { getTokenPrice, getTokenMetadata } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface Token {
   mint: string;
   symbol: string;
+  name: string;
   balance: number;
   price: number;
-  decimals: number;
+  imageUrl?: string | null;
   selected?: boolean;
 }
 
@@ -42,7 +44,6 @@ export function TokenList({
 
       setLoading(true);
       try {
-        // Fetch tokens from backend API
         const response = await fetch(`${API_URL}/api/tokens`, {
           method: 'POST',
           headers: {
@@ -58,23 +59,21 @@ export function TokenList({
         }
 
         const data = await response.json();
-        const tokenList = await getTokenList();
-        const tokenMap = tokenList.reduce((map, item) => {
-          map.set(item.address, item);
-          return map;
-        }, new Map());
 
-        // Process tokens and fetch prices
+        // Process tokens and fetch prices and metadata from DexScreener
         const tokenPromises = data.tokens.map(async (token: any) => {
-          const tokenInfo = tokenMap.get(token.mint);
-          const price = await getTokenPrice(token.mint);
+          const [price, metadata] = await Promise.all([
+            getTokenPrice(token.mint),
+            getTokenMetadata(token.mint)
+          ]);
 
           return {
             mint: token.mint,
-            symbol: tokenInfo?.symbol || "Unknown",
+            symbol: metadata?.symbol || "Unknown",
+            name: metadata?.name || "Unknown Token",
             balance: token.amount || 0,
-            decimals: tokenInfo?.decimals || 0,
             price: price,
+            imageUrl: metadata?.imageUrl,
             selected: false,
           };
         });
@@ -97,7 +96,8 @@ export function TokenList({
     const matchesPrice = !minPrice || token.price >= parseFloat(minPrice);
     const matchesSearch =
       !searchQuery ||
-      token.symbol.toLowerCase().includes(searchQuery.toLowerCase());
+      token.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      token.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesPrice && matchesSearch;
   });
 
@@ -155,7 +155,16 @@ export function TokenList({
                     onCheckedChange={() => handleTokenSelect(token)}
                   />
                 </TableCell>
-                <TableCell>{token.symbol}</TableCell>
+                <TableCell className="flex items-center gap-2">
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={token.imageUrl || ''} alt={token.symbol} />
+                    <AvatarFallback>{token.symbol.slice(0, 2)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{token.symbol}</span>
+                    <span className="text-sm text-muted-foreground">{token.name}</span>
+                  </div>
+                </TableCell>
                 <TableCell>{token.balance.toFixed(4)}</TableCell>
                 <TableCell>${token.price.toFixed(2)}</TableCell>
                 <TableCell>

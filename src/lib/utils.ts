@@ -10,6 +10,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const JUPITER_API = "https://quote-api.jup.ag/v6";
+export const DEXSCREENER_API = "https://api.dexscreener.com/latest/dex/search";
 export const OUTPUT_TOKEN = "So11111111111111111111111111111111111111112"; // SOL
 export const SLIPPAGE = 0.5; // 0.5% slippage
 
@@ -22,13 +23,38 @@ export async function getTokenList() {
 
 export async function getTokenPrice(mintAddress: string) {
   try {
-    const response = await axios.get(
-      `${JUPITER_API}/price?ids=${mintAddress}`
-    );
-    return response.data.data[mintAddress]?.price || 0;
-  } catch (error) {
-    console.error("Error fetching price:", error);
+    const response = await axios.get(`${DEXSCREENER_API}?q=${mintAddress}`);
+    if (response.data.pairs && response.data.pairs.length > 0) {
+      // Find the first Solana pair
+      const solanaPair = response.data.pairs.find((pair: any) => pair.chainId === 'solana');
+      if (solanaPair) {
+        return parseFloat(solanaPair.priceUsd) || 0;
+      }
+    }
     return 0;
+  } catch (error) {
+    console.error("Error fetching price from DexScreener:", error);
+    return 0;
+  }
+}
+
+export async function getTokenMetadata(mintAddress: string) {
+  try {
+    const response = await axios.get(`${DEXSCREENER_API}?q=${mintAddress}`);
+    if (response.data.pairs && response.data.pairs.length > 0) {
+      const solanaPair = response.data.pairs.find((pair: any) => pair.chainId === 'solana');
+      if (solanaPair) {
+        return {
+          symbol: solanaPair.baseToken.symbol || 'Unknown',
+          name: solanaPair.baseToken.name || 'Unknown Token',
+          imageUrl: solanaPair.info?.imageUrl || null
+        };
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("Error fetching token metadata:", error);
+    return null;
   }
 }
 
