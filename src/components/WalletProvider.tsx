@@ -11,8 +11,8 @@ import {
 } from "@solana/wallet-adapter-wallets";
 import { ReactNode, useCallback, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
-
-require("@solana/wallet-adapter-react-ui/styles.css");
+// Import the styles directly
+import "@solana/wallet-adapter-react-ui/styles.css";
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
